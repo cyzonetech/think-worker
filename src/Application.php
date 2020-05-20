@@ -14,7 +14,11 @@ namespace think\worker;
 use think\App;
 use think\Error;
 use think\exception\HttpException;
-use Workerman\Protocols\Http as WorkerHttp;
+use Workerman\Worker;
+use Workerman\Connection\TcpConnection;
+use Workerman\Protocols\Http;
+use Workerman\Protocols\Http\Request;
+use Workerman\Protocols\Http\Response;
 
 /**
  * Worker应用对象
@@ -22,86 +26,146 @@ use Workerman\Protocols\Http as WorkerHttp;
 class Application extends App
 {
     /**
+     * @var Worker
+     */
+    protected static $_worker = null;
+    /**
+     * @var TcpConnection
+     */
+    protected static $_connection = null;
+    /**
+     * @var Request
+     */
+    protected static $_request = null;
+
+    /**
+     * App constructor.
+     * @param Worker $worker
+     * @param $request_class
+     */
+    public function __construct($appPath = '', Worker $worker)
+    {
+        parent::__construct();
+        static::$_worker = $worker;
+    }
+
+    /**
+     * @return Request
+     */
+    public static function request()
+    {
+        return static::$_request;
+    }
+
+    /**
+     * @return TcpConnection
+     */
+    public static function connection()
+    {
+        return static::$_connection;
+    }
+
+    /**
+     * @return Worker
+     */
+    public static function worker()
+    {
+        return static::$_worker;
+    }
+
+    /**
      * 处理Worker请求
      * @access public
-     * @param  \Workerman\Connection\TcpConnection   $connection
-     * @param  void
+     * @param TcpConnection $connection
+     * @param Request $request
+     * @param void
      */
-    public function worker($connection)
+    public function onMessage(TcpConnection $connection, $request)
     {
         try {
-            ob_start();
-            // 重置应用的开始时间和内存占用
-            $this->beginTime = microtime(true);
-            $this->beginMem  = memory_get_usage();
+            static::$_request = $request;
+            static::$_connection = $connection;
 
-            // 销毁当前请求对象实例
-            $this->delete('think\Request');
+            $uri = parse_url($_SERVER['REQUEST_URI']);
+            $path = isset($uri['path']) ? $uri['path'] : '/';
 
-            $pathinfo = ltrim(strpos($_SERVER['REQUEST_URI'], '?') ? strstr($_SERVER['REQUEST_URI'], '?', true) : $_SERVER['REQUEST_URI'], '/');
+            $file = $this->root . $path;
 
-            $this->request
-                ->setPathinfo($pathinfo)
-                ->withInput($GLOBALS['HTTP_RAW_REQUEST_DATA']);
+            if (!is_file($file)) {
+                ob_start();
+                // 重置应用的开始时间和内存占用
+                $this->beginTime = microtime(true);
+                $this->beginMem = memory_get_usage();
 
-            if ($this->config->get('session.auto_start')) {
-                WorkerHttp::sessionStart();
-            }
+                // 销毁当前请求对象实例
+                $this->delete('think\Request');
 
-            // 更新请求对象实例
-            $this->route->setRequest($this->request);
+                $pathinfo = ltrim(strpos($_SERVER['REQUEST_URI'], '?')
+                    ? strstr($_SERVER['REQUEST_URI'], '?', true)
+                    : $_SERVER['REQUEST_URI'], '/');
 
-            $response = $this->run();
-            $response->send();
-            $content = ob_get_clean();
+                $this->request->setPathinfo($pathinfo)->withInput($GLOBALS['HTTP_RAW_REQUEST_DATA']);
 
-            // Trace调试注入
-            if ($this->env->get('app_trace', $this->config->get('app_trace'))) {
-                $this->debug->inject($response, $content);
-            }
+                // 更新请求对象实例
+                $this->route->setRequest($this->request);
 
-            $this->httpResponseCode($response->getCode());
+                $response = $this->run();
+                $response->send();
+                $content = ob_get_clean();
 
-            foreach ($response->getHeader() as $name => $val) {
-                // 发送头部信息
-                WorkerHttp::header($name . (!is_null($val) ? ':' . $val : ''));
-            }
+                // Trace调试注入
+                if ($this->env->get('app_trace', $this->config->get('app_trace'))) {
+                    $this->debug->inject($response, $content);
+                }
 
-            if (strtolower($_SERVER['HTTP_CONNECTION']) === "keep-alive") {
-                $connection->send($content);
+                static::send(
+                    $connection,
+                    new Response($response->getCode(), $response->getHeader(), $content),
+                    $request
+                );
             } else {
-                $connection->close($content);
+                static::send($connection, (new Response())->file($file), $request);
             }
         } catch (HttpException $e) {
-            $this->exception($connection, $e);
+            $this->exception($connection, $e, $request);
         } catch (\Exception $e) {
-            $this->exception($connection, $e);
+            $this->exception($connection, $e, $request);
         } catch (\Throwable $e) {
-            $this->exception($connection, $e);
+            $this->exception($connection, $e, $request);
         }
     }
 
-    protected function httpResponseCode($code = 200)
-    {
-        WorkerHttp::responseCode($code);
-    }
-
-    protected function exception($connection, $e)
+    protected function exception(TcpConnection $connection, $e, Request $request)
     {
         if ($e instanceof \Exception) {
             $handler = Error::getExceptionHandler();
             $handler->report($e);
 
-            $resp    = $handler->render($e);
+            $resp = $handler->render($e);
             $content = $resp->getContent();
-            $code    = $resp->getCode();
+            $code = $resp->getCode();
 
-            $this->httpResponseCode($code);
-            $connection->send($content);
+            static::send($connection, new Response($code, [], $content), $request);
         } else {
-            $this->httpResponseCode(500);
-            $connection->send($e->getMessage());
+            static::send($connection, new Response(500, [], $e->getMessage()),  $request);
         }
+    }
+
+    /**
+     * @param TcpConnection $connection
+     * @param $response
+     * @param Request $request
+     */
+    protected static function send(TcpConnection $connection, $response, Request $request)
+    {
+        static::$_connection = static::$_request = null;
+        $keepAlive = $request->header('connection');
+        if (($keepAlive === null && $request->protocolVersion() === '1.1')
+            || $keepAlive === 'keep-alive' || $keepAlive === 'Keep-Alive') {
+            $connection->send($response);
+            return;
+        }
+        $connection->close($response);
     }
 
 }

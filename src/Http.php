@@ -14,10 +14,11 @@ use RecursiveDirectoryIterator;
 use RecursiveIteratorIterator;
 use think\Facade;
 use think\Loader;
-use Workerman\Lib\Timer;
-use Workerman\Protocols\Http as WorkerHttp;
-use Workerman\Protocols\Http as HttpProtocols;
 use Workerman\Worker;
+use Workerman\Lib\Timer;
+use Workerman\Connection\TcpConnection;
+use Workerman\Protocols\Http\Request;
+use Workerman\Protocols\Http\Response;
 
 /**
  * Worker http server 命令行服务类
@@ -29,15 +30,13 @@ class Http extends Server
     protected $root;
     protected $monitor;
     protected $lastMtime;
-    /** @var array Mime mapping. */
-    protected static $mimeTypeMap = [];
 
     /**
      * 架构函数
      * @access public
-     * @param  string $host 监听地址
-     * @param  int    $port 监听端口
-     * @param  array  $context 参数
+     * @param string $host 监听地址
+     * @param int $port 监听端口
+     * @param array $context 参数
      */
     public function __construct($host, $port, $context = [])
     {
@@ -69,13 +68,13 @@ class Http extends Server
     public function setMonitor($interval = 2, $path = [])
     {
         $this->monitor['interval'] = $interval;
-        $this->monitor['path']     = (array) $path;
+        $this->monitor['path'] = (array)$path;
     }
 
     /**
      * 设置参数
      * @access public
-     * @param  array    $option 参数
+     * @param array $option 参数
      * @return void
      */
     public function option(array $option)
@@ -91,17 +90,15 @@ class Http extends Server
     /**
      * onWorkerStart 事件回调
      * @access public
-     * @param  \Workerman\Worker $worker
+     * @param \Workerman\Worker $worker
      * @return void
      * @throws \Exception
      */
     public function onWorkerStart($worker)
     {
-        $this->initMimeTypeMap();
-        $this->app       = new Application($this->appPath);
-        $this->lastMtime = time();
+        $app = new Application($this->appPath, $worker);
 
-        $this->app->workerman = $worker;
+        $this->lastMtime = time();
 
         // 指定日志类驱动
         Loader::addClassMap([
@@ -109,27 +106,27 @@ class Http extends Server
         ]);
 
         Facade::bind([
-            'think\facade\Cookie'     => Cookie::class,
-            'think\facade\Session'    => Session::class,
+            'think\facade\Cookie' => Cookie::class,
+            'think\facade\Session' => Session::class,
             facade\Application::class => Application::class,
-            facade\Http::class        => Http::class,
+            facade\Http::class => Http::class,
         ]);
 
         // 应用初始化
-        $this->app->initialize();
+        $app->initialize();
 
-        $this->app->bindTo([
-            'cookie'  => Cookie::class,
+        $app->bindTo([
+            'cookie' => Cookie::class,
             'session' => Session::class,
         ]);
 
         if (0 == $worker->id && $this->monitor) {
-            $paths = $this->monitor['path'] ?: [$this->app->getAppPath(), $this->app->getConfigPath()];
+            $paths = $this->monitor['path'] ?: [$app->getAppPath(), $app->getConfigPath()];
             $timer = $this->monitor['interval'] ?: 2;
 
             Timer::add($timer, function () use ($paths) {
                 foreach ($paths as $path) {
-                    $dir      = new RecursiveDirectoryIterator($path);
+                    $dir = new RecursiveDirectoryIterator($path);
                     $iterator = new RecursiveIteratorIterator($dir);
 
                     foreach ($iterator as $file) {
@@ -147,89 +144,22 @@ class Http extends Server
                 }
             });
         }
+
+        $worker->onMessage = [$app, 'onMessage'];
     }
 
-    /**
-     * onMessage 事件回调
-     * @access public
-     * @param  \Workerman\Connection\TcpConnection    $connection
-     * @param  mixed                                  $data
-     * @return void
-     */
-    public function onMessage($connection, $data)
+    protected function send(TcpConnection $connection, $response, Request $request)
     {
-        $uri  = parse_url($_SERVER['REQUEST_URI']);
-        $path = isset($uri['path']) ? $uri['path'] : '/';
+        static::$_connection = static::$_request = null;
 
-        $file = $this->root . $path;
-
-        if (!is_file($file)) {
-            $this->app->worker($connection, $data);
-        } else {
-            $this->sendFile($connection, $file);
+        $keepAlive = $request->header('connection');
+        if (($keepAlive === null && $request->protocolVersion() === '1.1')
+            || $keepAlive === 'keep-alive' || $keepAlive === 'Keep-Alive'
+        ) {
+            $connection->send($response);
+            return;
         }
-    }
-
-    protected function sendFile($connection, $file)
-    {
-        $info        = stat($file);
-        $modifiyTime = $info ? date('D, d M Y H:i:s', $info['mtime']) . ' ' . date_default_timezone_get() : '';
-
-        if (!empty($_SERVER['HTTP_IF_MODIFIED_SINCE']) && $info) {
-            // Http 304.
-            if ($modifiyTime === $_SERVER['HTTP_IF_MODIFIED_SINCE']) {
-                // 304
-                WorkerHttp::header('HTTP/1.1 304 Not Modified');
-                // Send nothing but http headers..
-                return $connection->close('');
-            }
-        }
-
-        $mimeType = $this->getMimeType($file);
-
-        WorkerHttp::header('HTTP/1.1 200 OK');
-        WorkerHttp::header('Connection: keep-alive');
-
-        if ($mimeType) {
-            WorkerHttp::header('Content-Type: ' . $mimeType);
-        } else {
-            WorkerHttp::header('Content-Type: application/octet-stream');
-            $fileinfo = pathinfo($file);
-            $filename = isset($fileinfo['filename']) ? $fileinfo['filename'] : '';
-            WorkerHttp::header('Content-Disposition: attachment; filename="' . $filename . '"');
-        }
-
-        if ($modifiyTime) {
-            WorkerHttp::header('Last-Modified: ' . $modifiyTime);
-        }
-
-        WorkerHttp::header('Content-Length: ' . filesize($file));
-
-        ob_start();
-        readfile($file);
-        $content = ob_get_clean();
-
-        return $connection->send($content);
-    }
-
-    /**
-     * 获取文件类型信息
-     * @access public
-     * @param $filename
-     * @return string
-     */
-    public function getMimeType($filename)
-    {
-        $file_info = pathinfo($filename);
-        $extension = isset($file_info['extension']) ? $file_info['extension'] : '';
-
-        if (isset(self::$mimeTypeMap[$extension])) {
-            $mime = self::$mimeTypeMap[$extension];
-        } else {
-            $finfo = finfo_open(FILEINFO_MIME_TYPE);
-            $mime = finfo_file($finfo, $filename);
-        }
-        return $mime;
+        $connection->close($response);
     }
 
     /**
@@ -252,33 +182,4 @@ class Http extends Server
         Worker::stopAll();
     }
 
-    /**
-     * Init mime map.
-     *
-     * @return void
-     * @throws \Exception
-     */
-    public function initMimeTypeMap()
-    {
-        $mime_file = HttpProtocols::getMimeTypesFile();
-        if (!is_file($mime_file)) {
-            Worker::log("$mime_file mime.type file not fond");
-            return;
-        }
-        $items = file($mime_file, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
-        if (!is_array($items)) {
-            Worker::log("get $mime_file mime.type content fail");
-            return;
-        }
-        foreach ($items as $content) {
-            if (preg_match("/\s*(\S+)\s+(\S.+)/", $content, $match)) {
-                $mime_type                      = $match[1];
-                $workerman_file_extension_var   = $match[2];
-                $workerman_file_extension_array = explode(' ', substr($workerman_file_extension_var, 0, -1));
-                foreach ($workerman_file_extension_array as $workerman_file_extension) {
-                    self::$mimeTypeMap[$workerman_file_extension] = $mime_type;
-                }
-            }
-        }
-    }
 }
