@@ -16,14 +16,11 @@ use think\Facade;
 use think\Loader;
 use Workerman\Worker;
 use Workerman\Lib\Timer;
-use Workerman\Connection\TcpConnection;
-use Workerman\Protocols\Http\Request;
-use Workerman\Protocols\Http\Response;
 
 /**
  * Worker http server 命令行服务类
  */
-class Http extends Server
+class HttpServer extends Server
 {
     protected $app;
     protected $appPath;
@@ -96,7 +93,8 @@ class Http extends Server
      */
     public function onWorkerStart($worker)
     {
-        $app = new Application($this->appPath, $worker);
+        $app = new Application($this->appPath);
+        $app->worker($worker);
 
         $this->lastMtime = time();
 
@@ -109,7 +107,7 @@ class Http extends Server
             'think\facade\Cookie' => Cookie::class,
             'think\facade\Session' => Session::class,
             facade\Application::class => Application::class,
-            facade\Http::class => Http::class,
+            facade\HttpServer::class => HttpServer::class,
         ]);
 
         // 应用初始化
@@ -146,20 +144,6 @@ class Http extends Server
         }
 
         $worker->onMessage = [$app, 'onMessage'];
-    }
-
-    protected function send(TcpConnection $connection, $response, Request $request)
-    {
-        static::$_connection = static::$_request = null;
-
-        $keepAlive = $request->header('connection');
-        if (($keepAlive === null && $request->protocolVersion() === '1.1')
-            || $keepAlive === 'keep-alive' || $keepAlive === 'Keep-Alive'
-        ) {
-            $connection->send($response);
-            return;
-        }
-        $connection->close($response);
     }
 
     /**

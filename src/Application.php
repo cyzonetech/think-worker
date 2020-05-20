@@ -39,17 +39,6 @@ class Application extends App
     protected static $_request = null;
 
     /**
-     * App constructor.
-     * @param Worker $worker
-     * @param $request_class
-     */
-    public function __construct($appPath = '', Worker $worker)
-    {
-        parent::__construct();
-        static::$_worker = $worker;
-    }
-
-    /**
      * @return Request
      */
     public static function request()
@@ -68,8 +57,11 @@ class Application extends App
     /**
      * @return Worker
      */
-    public static function worker()
+    public static function worker($worker = null)
     {
+        if ($worker) {
+            static::$_worker = $worker;
+        }
         return static::$_worker;
     }
 
@@ -86,9 +78,7 @@ class Application extends App
             static::$_request = $request;
             static::$_connection = $connection;
 
-            $uri = parse_url($_SERVER['REQUEST_URI']);
-            $path = isset($uri['path']) ? $uri['path'] : '/';
-
+            $path = $request->path();
             $file = $this->root . $path;
 
             if (!is_file($file)) {
@@ -118,11 +108,9 @@ class Application extends App
                     $this->debug->inject($response, $content);
                 }
 
-                static::send(
-                    $connection,
-                    new Response($response->getCode(), $response->getHeader(), $content),
-                    $request
-                );
+                static::send($connection, new Response(
+                    $response->getCode(), $response->getHeader(), $content
+                ), $request);
             } else {
                 static::send($connection, (new Response())->file($file), $request);
             }
