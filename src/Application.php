@@ -16,9 +16,6 @@ use think\Error;
 use think\exception\HttpException;
 use Workerman\Worker;
 use Workerman\Connection\TcpConnection;
-use Workerman\Protocols\Http;
-use Workerman\Protocols\Http\Request;
-use Workerman\Protocols\Http\Response;
 
 /**
  * Worker应用对象
@@ -79,7 +76,7 @@ class Application extends App
             static::$_connection = $connection;
 
             $path = $request->path();
-            $file = $this->root . $path;
+            $file = $this->rootPath . 'public' . $path;
 
             if (!is_file($file)) {
                 ob_start();
@@ -90,11 +87,11 @@ class Application extends App
                 // 销毁当前请求对象实例
                 $this->delete('think\Request');
 
-                $pathinfo = ltrim(strpos($_SERVER['REQUEST_URI'], '?')
-                    ? strstr($_SERVER['REQUEST_URI'], '?', true)
-                    : $_SERVER['REQUEST_URI'], '/');
-
-                $this->request->setPathinfo($pathinfo)->withInput($GLOBALS['HTTP_RAW_REQUEST_DATA']);
+                $this->request->setPathinfo($path)
+                    ->withInput($request->rawBody())
+                    ->withServer($request->server())
+                    ->withGet($request->get())
+                    ->withPost($request->post());
 
                 // 更新请求对象实例
                 $this->route->setRequest($this->request);

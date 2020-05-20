@@ -14,6 +14,7 @@ use RecursiveDirectoryIterator;
 use RecursiveIteratorIterator;
 use think\Facade;
 use think\Loader;
+use Workerman\Protocols\Http;
 use Workerman\Worker;
 use Workerman\Lib\Timer;
 
@@ -98,6 +99,7 @@ class HttpServer extends Server
 
         $this->lastMtime = time();
 
+        Http::requestClass(Request::class);
         // 指定日志类驱动
         Loader::addClassMap([
             'think\\log\\driver\\File' => __DIR__ . '/log/File.php',
