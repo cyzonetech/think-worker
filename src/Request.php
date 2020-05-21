@@ -223,6 +223,8 @@ class Request extends \Workerman\Protocols\Http\Request
             $this->_data['server'] = static::$_serverCache[$raw_head];
             return;
         }
+
+        $microtime = \microtime(true);
         $this->_data['server'] = array(
             'QUERY_STRING' => \parse_url($this->uri(), PHP_URL_QUERY),
             'REQUEST_METHOD' => '',
@@ -240,8 +242,8 @@ class Request extends \Workerman\Protocols\Http\Request
             'CONTENT_TYPE' => '',
             'REMOTE_ADDR' => '',
             'REMOTE_PORT' => '0',
-            //'REQUEST_TIME'         => (int)$microtime,
-            //'REQUEST_TIME_FLOAT'   => $microtime //compatible php5.4
+            'REQUEST_TIME'         => (int)$microtime,
+            'REQUEST_TIME_FLOAT'   => $microtime //compatible php5.4
         );
 
         $header_data = \explode("\r\n", $raw_head);
@@ -266,6 +268,10 @@ class Request extends \Workerman\Protocols\Http\Request
                         if (isset($tmp[1])) {
                             $this->_data['server']['SERVER_PORT'] = $tmp[1];
                         }
+                        break;
+                    // cookie
+                    case 'COOKIE':
+                        \parse_str(\str_replace('; ', '&', $this->_data['server']['HTTP_COOKIE']), $_COOKIE);
                         break;
                     // content-type
                     case 'CONTENT_TYPE':

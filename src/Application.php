@@ -105,9 +105,26 @@ class Application extends App
                     $this->debug->inject($response, $content);
                 }
 
-                static::send($connection, new Response(
+                $workerResponse = new Response(
                     $response->getCode(), $response->getHeader(), $content
-                ), $request);
+                );
+
+                $newCookies = $this->cookie->newCookies();
+                if ($newCookies) {
+                    $this->cookie->clearNewCookies();
+                    foreach ($newCookies as $cookie) {
+                        $workerResponse->cookie(
+                            $cookie['name'],
+                            $cookie['value'],
+                            $cookie['expire'],
+                            $cookie['option']['path'],
+                            $cookie['option']['domain'],
+                            $cookie['option']['secure'],
+                            $cookie['option']['http_only']
+                        );
+                    }
+                }
+                static::send($connection, $workerResponse, $request);
             } else {
                 static::send($connection, (new Response())->file($file), $request);
             }
@@ -141,7 +158,7 @@ class Application extends App
      * @param $response
      * @param Request $request
      */
-    protected static function send(TcpConnection $connection, $response, Request $request)
+    protected static function send(TcpConnection $connection, Response $response, Request $request)
     {
         static::$_connection = static::$_request = null;
         $keepAlive = $request->header('connection');

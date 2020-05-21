@@ -11,13 +11,13 @@
 namespace think\worker;
 
 use think\Cookie as BaseCookie;
-use Workerman\Protocols\Http as WorkerHttp;
 
 /**
  * Workerman Cookie类
  */
 class Cookie extends BaseCookie
 {
+    protected $_newCookies = [];
 
     /**
      * Cookie初始化
@@ -28,6 +28,16 @@ class Cookie extends BaseCookie
     public function init(array $config = [])
     {
         $this->config = array_merge($this->config, array_change_key_case($config));
+    }
+
+    public function newCookies()
+    {
+        return $this->_newCookies;
+    }
+
+    public function clearNewCookies()
+    {
+        $this->_newCookies = [];
     }
 
     /**
@@ -41,6 +51,11 @@ class Cookie extends BaseCookie
      */
     protected function setCookie($name, $value, $expire, $option = [])
     {
-        WorkerHttp::setCookie($name, $value, $expire, $option['path'], $option['domain'], $option['secure'], $option['httponly']);
+        $this->_newCookies[] = [
+            'name' => $name,
+            'value' => $value,
+            'expire' => $expire,
+            'option' => $option
+        ];
     }
 }

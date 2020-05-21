@@ -17,7 +17,7 @@ use think\Facade;
  * @see \think\worker\Application
  * @mixin \think\worker\Application
  * @method void initialize() static 初始化应用
- * @method void worker(\Workerman\Connection\TcpConnection $connection) static 处理Worker请求
+ * @method void onMessage(\Workerman\Connection\TcpConnection $connection, $request) static 处理Worker请求
  */
 class Application extends Facade
 {

@@ -108,8 +108,6 @@ class HttpServer extends Server
         Facade::bind([
             'think\facade\Cookie' => Cookie::class,
             'think\facade\Session' => Session::class,
-            facade\Application::class => Application::class,
-            facade\HttpServer::class => HttpServer::class,
         ]);
 
         // 应用初始化
