@@ -22,10 +22,7 @@ use Workerman\Connection\TcpConnection;
  */
 class Application extends App
 {
-    /**
-     * @var Worker
-     */
-    protected static $_worker = null;
+
     /**
      * @var TcpConnection
      */
@@ -38,7 +35,7 @@ class Application extends App
     /**
      * @return Request
      */
-    public static function request()
+    public static function workerRequest()
     {
         return static::$_request;
     }
@@ -46,20 +43,9 @@ class Application extends App
     /**
      * @return TcpConnection
      */
-    public static function connection()
+    public static function workerConnection()
     {
         return static::$_connection;
-    }
-
-    /**
-     * @return Worker
-     */
-    public static function worker($worker = null)
-    {
-        if ($worker) {
-            static::$_worker = $worker;
-        }
-        return static::$_worker;
     }
 
     /**
@@ -109,9 +95,8 @@ class Application extends App
                     $response->getCode(), $response->getHeader(), $content
                 );
 
-                $newCookies = $this->cookie->newCookies();
+                $newCookies = $request->_newCookies;
                 if ($newCookies) {
-                    $this->cookie->clearNewCookies();
                     foreach ($newCookies as $cookie) {
                         $workerResponse->cookie(
                             $cookie['name'],

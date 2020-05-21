@@ -10,6 +10,7 @@
 // +----------------------------------------------------------------------
 namespace think\worker;
 
+use think\Container;
 use think\Cookie as BaseCookie;
 
 /**
@@ -51,7 +52,9 @@ class Cookie extends BaseCookie
      */
     protected function setCookie($name, $value, $expire, $option = [])
     {
-        $this->_newCookies[] = [
+        $app = Container::get('think\App');
+
+        $app->workerRequest()->_newCookies[] = [
             'name' => $name,
             'value' => $value,
             'expire' => $expire,

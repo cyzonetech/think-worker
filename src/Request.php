@@ -29,21 +29,12 @@ class Request extends \Workerman\Protocols\Http\Request
      * @var array
      */
     protected static $_serverCache = array();
-
     /**
-     * @var string
+     * new cookies.
+     *
+     * @var array
      */
-    public $app = null;
-
-    /**
-     * @var string
-     */
-    public $controller = null;
-
-    /**
-     * @var string
-     */
-    public $action = null;
+    public $_newCookies = array();
 
     /**
      * @return mixed|null

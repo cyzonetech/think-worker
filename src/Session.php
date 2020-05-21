@@ -47,17 +47,14 @@ class Session extends BaseSession
         if (isset($config['use_lock'])) {
             $this->lock = $config['use_lock'];
         }
+        WorkerHttp::sessionName($config['name'] ?? 'PHPSESSID');
 
         if (isset($config['var_session_id']) && isset($_REQUEST[$config['var_session_id']])) {
             session_id($_REQUEST[$config['var_session_id']]);
         } elseif (isset($config['id']) && !empty($config['id'])) {
             session_id($config['id']);
         } else {
-            session_id(WorkerHttp::sessionId());
-        }
-
-        if (isset($config['name'])) {
-            WorkerHttp::sessionName($config['name']);
+            session_id(Request::sessionId());
         }
 
         if (isset($config['path'])) {
