@@ -94,7 +94,9 @@ class HttpServer extends Server
      */
     public function onWorkerStart($worker)
     {
-        $app = new Application($this->appPath);
+        $app = new App($this->appPath);
+
+        $app::worker($worker);
 
         $this->lastMtime = time();
 
@@ -105,16 +107,18 @@ class HttpServer extends Server
         ]);
 
         Facade::bind([
+            'think\facade\App' => App::class,
             'think\facade\Cookie' => Cookie::class,
-            //'think\facade\Session' => Session::class,
+            'think\facade\Session' => Session::class,
         ]);
 
         // 应用初始化
         $app->initialize();
 
         $app->bindTo([
+            'app' => App::class,
             'cookie' => Cookie::class,
-            //'session' => Session::class,
+            'session' => Session::class,
         ]);
 
         if (0 == $worker->id && $this->monitor) {

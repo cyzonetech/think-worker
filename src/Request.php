@@ -107,7 +107,7 @@ class Request extends \Workerman\Protocols\Http\Request
      */
     public function getRemoteIp()
     {
-        return Application::connection()->getRemoteIp();
+        return App::connection()->getRemoteIp();
     }
 
     /**
@@ -115,7 +115,7 @@ class Request extends \Workerman\Protocols\Http\Request
      */
     public function getRemotePort()
     {
-        return Application::connection()->getRemotePort();
+        return App::connection()->getRemotePort();
     }
 
     /**
@@ -123,7 +123,7 @@ class Request extends \Workerman\Protocols\Http\Request
      */
     public function getLocalIp()
     {
-        return Application::connection()->getLocalIp();
+        return App::connection()->getLocalIp();
     }
 
     /**
@@ -131,7 +131,7 @@ class Request extends \Workerman\Protocols\Http\Request
      */
     public function getLocalPort()
     {
-        return Application::connection()->getLocalPort();
+        return App::connection()->getLocalPort();
     }
 
     /**
@@ -198,6 +198,16 @@ class Request extends \Workerman\Protocols\Http\Request
             return $this->_data['server'];
         }
         return isset($this->_data['server'][$name]) ? $this->_data['server'][$name] : $default;
+    }
+
+    public function newCookie($name, $value, $expire, $option = [])
+    {
+        $this->_newCookies[] = ['name' => $name, 'value' => $value, 'expire' => $expire, 'option' => $option];
+    }
+
+    public function getNewCookies()
+    {
+        return $this->_newCookies;
     }
 
     /**

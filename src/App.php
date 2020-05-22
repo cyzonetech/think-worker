@@ -11,18 +11,22 @@
 
 namespace think\worker;
 
-use think\App;
+use think\App as BaseApp;
 use think\Error;
 use think\exception\HttpException;
-use Workerman\Worker;
 use Workerman\Connection\TcpConnection;
+use Workerman\Timer;
+use Workerman\Worker;
 
 /**
  * Worker应用对象
  */
-class Application extends App
+class App extends BaseApp
 {
-
+    /**
+     * @var Worker
+     */
+    protected static $_worker = null;
     /**
      * @var TcpConnection
      */
@@ -31,7 +35,25 @@ class Application extends App
      * @var Request
      */
     protected static $_request = null;
+    /**
+     * @var int
+     */
+    protected static $_maxRequestCount = 1000000;
+    /**
+     * @var int
+     */
+    protected static $_gracefulStopTimer = null;
 
+    /**
+     * @return Worker
+     */
+    public static function worker(Worker $worker = null)
+    {
+        if ($worker) {
+            static::$_worker = $worker;
+        }
+        return static::$_worker;
+    }
     /**
      * @return Request
      */
@@ -57,6 +79,11 @@ class Application extends App
      */
     public function onMessage(TcpConnection $connection, $request)
     {
+        static $request_count = 0;
+        if (++$request_count > static::$_maxRequestCount) {
+            static::tryToGracefulExit();
+        }
+
         try {
             static::$_request = $request;
             static::$_connection = $connection;
@@ -95,7 +122,7 @@ class Application extends App
                     $response->getCode(), $response->getHeader(), $content
                 );
 
-                $newCookies = $request->_newCookies;
+                $newCookies = $request->getNewCookies();
                 if ($newCookies) {
                     foreach ($newCookies as $cookie) {
                         $workerResponse->cookie(
@@ -120,6 +147,7 @@ class Application extends App
         } catch (\Throwable $e) {
             $this->exception($connection, $e, $request);
         }
+        return null;
     }
 
     protected function exception(TcpConnection $connection, $e, Request $request)
@@ -153,6 +181,20 @@ class Application extends App
             return;
         }
         $connection->close($response);
+    }
+
+    /**
+     * @return void
+     */
+    protected static function tryToGracefulExit()
+    {
+        if (static::$_gracefulStopTimer === null) {
+            static::$_gracefulStopTimer = Timer::add(rand(1, 10), function(){
+                if (\count(static::$_worker->connections) === 0) {
+                    Worker::stopAll();
+                }
+            });
+        }
     }
 
 }

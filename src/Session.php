@@ -11,17 +11,23 @@
 namespace think\worker;
 
 use think\Session as BaseSession;
+use think\worker\session\FileSessionHandler;
+use think\worker\session\RedisSessionHandler;
 use Workerman\Protocols\Http as WorkerHttp;
+use Workerman\Protocols\Http\Session as WorkSession;
+
 
 /**
  * Workerman Cookie类
  */
 class Session extends BaseSession
 {
+    protected $_handler;
+
     /**
      * session初始化
      * @access public
-     * @param  array $config
+     * @param array $config
      * @return void
      * @throws \think\Exception
      */
@@ -30,6 +36,9 @@ class Session extends BaseSession
         $config = $config ?: $this->config;
 
         $isDoStart = false;
+
+        WorkerHttp::sessionName($config['name'] ?? 'PHPSESSID');
+
         if (isset($config['use_trans_sid'])) {
             ini_set('session.use_trans_sid', $config['use_trans_sid'] ? 1 : 0);
         }
@@ -46,19 +55,6 @@ class Session extends BaseSession
 
         if (isset($config['use_lock'])) {
             $this->lock = $config['use_lock'];
-        }
-        WorkerHttp::sessionName($config['name'] ?? 'PHPSESSID');
-
-        if (isset($config['var_session_id']) && isset($_REQUEST[$config['var_session_id']])) {
-            session_id($_REQUEST[$config['var_session_id']]);
-        } elseif (isset($config['id']) && !empty($config['id'])) {
-            session_id($config['id']);
-        } else {
-            session_id(Request::sessionId());
-        }
-
-        if (isset($config['path'])) {
-            WorkerHttp::sessionSavePath($config['path']);
         }
 
         if (isset($config['domain'])) {
@@ -89,42 +85,36 @@ class Session extends BaseSession
         if (isset($config['cache_expire'])) {
             session_cache_expire($config['cache_expire']);
         }
+        $config['type'] = $config['type'] ?: 'file';
 
-        if (!empty($config['type'])) {
-            // 读取session驱动
-            $class = false !== strpos($config['type'], '\\') ? $config['type'] : '\\think\\session\\driver\\' . ucwords($config['type']);
-
-            // 检查驱动类
-            if (!class_exists($class) || !session_set_save_handler(new $class($config))) {
-                throw new ClassNotFoundException('error session handler:' . $class, $class);
-            }
+        if ($config['type'] == 'file') {
+            $config['save_path'] = app()->getRuntimePath() . 'sessions';
+        } elseif ($config['type'] == 'redis') {
+            // redis配置
+            $redis = [
+                'host' => '127.0.0.1', // 必选参数
+                'port' => 6379, // 必选参数
+                'auth' => '', // 可选参数
+                'select' => 0, // 可选参数
+                'timeout' => 2, // 可选参数
+                'expire' => 3600, // 有效期(秒)
+                'persistent' => true, // 是否长连接
+                'prefix' => 'sess_' // 可选参数
+            ];
+            $config = array_merge($redis, $config);
         }
+        $this->config = $config;
+
+        $handlers = [
+            'file' => FileSessionHandler::class,
+            'redis' => RedisSessionHandler::class
+        ];
+        WorkSession::handlerClass($handlers[$config['type']], $config);
 
         if ($isDoStart) {
             $this->start();
         } else {
             $this->init = false;
-        }
-
-        return $this;
-    }
-
-    /**
-     * session自动启动或者初始化
-     * @access public
-     * @return void
-     */
-    public function boot()
-    {
-        if (is_null($this->init)) {
-            $this->init();
-        }
-
-        if (false === $this->init) {
-            if (PHP_SESSION_ACTIVE != session_status()) {
-                $this->start();
-            }
-            $this->init = true;
         }
     }
 
@@ -135,7 +125,7 @@ class Session extends BaseSession
      */
     public function start()
     {
-        WorkerHttp::sessionStart();
+        $this->_handler = App::workerRequest()->session();
 
         $this->init = true;
     }
@@ -148,7 +138,8 @@ class Session extends BaseSession
     public function pause()
     {
         // 暂停session
-        WorkerHttp::sessionWriteClose();
+        //WorkerHttp::sessionWriteClose();
+        print_r('do pause');
         $this->init = false;
     }
 }

@@ -10,7 +10,6 @@
 // +----------------------------------------------------------------------
 namespace think\worker;
 
-use think\Container;
 use think\Cookie as BaseCookie;
 
 /**
@@ -31,16 +30,6 @@ class Cookie extends BaseCookie
         $this->config = array_merge($this->config, array_change_key_case($config));
     }
 
-    public function newCookies()
-    {
-        return $this->_newCookies;
-    }
-
-    public function clearNewCookies()
-    {
-        $this->_newCookies = [];
-    }
-
     /**
      * Cookie 设置保存
      *
@@ -52,13 +41,6 @@ class Cookie extends BaseCookie
      */
     protected function setCookie($name, $value, $expire, $option = [])
     {
-        $app = Container::get('think\App');
-
-        $app->workerRequest()->_newCookies[] = [
-            'name' => $name,
-            'value' => $value,
-            'expire' => $expire,
-            'option' => $option
-        ];
+        App::workerRequest()->newCookie($name, $value, $expire, $option);
     }
 }
