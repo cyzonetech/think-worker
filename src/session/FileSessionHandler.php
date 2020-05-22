@@ -21,5 +21,10 @@ use Workerman\Protocols\Http\Session\FileSessionHandler as SessionHandler;
  */
 class FileSessionHandler extends SessionHandler
 {
-
+    /**
+     * Session file prefix.
+     *
+     * @var string
+     */
+    protected static $_sessionFilePrefix = 'sess_';
 }

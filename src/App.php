@@ -117,7 +117,6 @@ class App extends BaseApp
                 if ($this->env->get('app_trace', $this->config->get('app_trace'))) {
                     $this->debug->inject($response, $content);
                 }
-
                 $workerResponse = new Response(
                     $response->getCode(), $response->getHeader(), $content
                 );

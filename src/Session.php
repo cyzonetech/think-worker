@@ -22,6 +22,10 @@ use Workerman\Protocols\Http\Session as WorkSession;
  */
 class Session extends BaseSession
 {
+    /**
+     * Workerman Session操作句柄
+     * @var
+     */
     protected $_handler;
 
     /**
@@ -119,6 +123,25 @@ class Session extends BaseSession
     }
 
     /**
+     * session自动启动或者初始化
+     * @access public
+     * @return void
+     */
+    public function boot()
+    {
+        if (is_null($this->init)) {
+            $this->init();
+        }
+
+        if (false === $this->init) {
+            if (PHP_SESSION_ACTIVE != session_status()) {
+                $this->start();
+            }
+            $this->init = true;
+        }
+    }
+
+    /**
      * 启动session
      * @access public
      * @return void
@@ -126,20 +149,110 @@ class Session extends BaseSession
     public function start()
     {
         $this->_handler = App::workerRequest()->session();
+        // 获取所有SESSION
+        $_SESSION = $this->_handler->all();
 
         $this->init = true;
     }
 
     /**
-     * 暂停session
+     * session设置
+     * @access public
+     * @param string $name session名称
+     * @param mixed $value session值
+     * @param string|null $prefix 作用域（前缀）
+     * @return void
+     */
+    public function set($name, $value, $prefix = null)
+    {
+        empty($this->init) && $this->boot();
+
+        $prefix = !is_null($prefix) ? $prefix : $this->prefix;
+
+        if (strpos($name, '.')) {
+            // 二维数组赋值
+            list($name1, $name2) = explode('.', $name);
+            if ($prefix) {
+                $_SESSION[$prefix][$name1][$name2] = $value;
+            } else {
+                $_SESSION[$name1][$name2] = $value;
+            }
+        } elseif ($prefix) {
+            $_SESSION[$prefix][$name] = $value;
+        } else {
+            $_SESSION[$name] = $value;
+        }
+        $this->_handler->put($_SESSION);
+    }
+
+    /**
+     * 删除session数据
+     * @access public
+     * @param string|array $name session名称
+     * @param string|null $prefix 作用域（前缀）
+     * @return void
+     */
+    public function delete($name, $prefix = null)
+    {
+        empty($this->init) && $this->boot();
+
+        $prefix = !is_null($prefix) ? $prefix : $this->prefix;
+
+        if (is_array($name)) {
+            foreach ($name as $key) {
+                $this->delete($key, $prefix);
+            }
+        } elseif (strpos($name, '.')) {
+            list($name1, $name2) = explode('.', $name);
+            if ($prefix) {
+                unset($_SESSION[$prefix][$name1][$name2]);
+            } else {
+                unset($_SESSION[$name1][$name2]);
+            }
+        } else {
+            if ($prefix) {
+                unset($_SESSION[$prefix][$name]);
+            } else {
+                unset($_SESSION[$name]);
+            }
+        }
+        $this->_handler->put($_SESSION);
+    }
+
+    /**
+     * 清空session数据
+     * @access public
+     * @param string|null $prefix 作用域（前缀）
+     * @return void
+     */
+    public function clear($prefix = null)
+    {
+        empty($this->init) && $this->boot();
+        $prefix = !is_null($prefix) ? $prefix : $this->prefix;
+
+        if ($prefix) {
+            unset($_SESSION[$prefix]);
+        } else {
+            $_SESSION = [];
+        }
+        $this->_handler->put($_SESSION);
+    }
+
+    /**
+     * 销毁session
      * @access public
      * @return void
      */
-    public function pause()
+    public function destroy()
     {
-        // 暂停session
-        //WorkerHttp::sessionWriteClose();
-        print_r('do pause');
-        $this->init = false;
+        if (!empty($_SESSION)) {
+            $_SESSION = [];
+            $this->_handler->flush();
+        }
+        session_unset();
+        session_destroy();
+
+        $this->init = null;
     }
+
 }
