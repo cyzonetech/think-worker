@@ -11,7 +11,6 @@
 namespace think\worker;
 
 use think\Session as BaseSession;
-use Workerman\Worker;
 use Workerman\Protocols\Http as WorkerHttp;
 
 /**

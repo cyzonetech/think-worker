@@ -14,9 +14,9 @@ namespace think\worker;
 use think\Error;
 use think\App as BaseApp;
 use think\exception\HttpException;
-use Workerman\Connection\TcpConnection;
 use Workerman\Worker;
 use Workerman\Lib\Timer;
+use Workerman\Connection\TcpConnection;
 use Workerman\Protocols\Http as WorkerHttp;
 
 /**
