@@ -110,6 +110,7 @@ class HttpServer extends Server
         ]);
 
         Facade::bind([
+            'think\facade\App' => App::class,
             'think\facade\Cookie' => Cookie::class,
             'think\facade\Session' => Session::class,
         ]);
@@ -118,6 +119,7 @@ class HttpServer extends Server
         $this->app->initialize();
 
         $this->app->bindTo([
+            'app' => App::class,
             'cookie' => Cookie::class,
             'session' => Session::class,
         ]);
@@ -172,7 +174,7 @@ class HttpServer extends Server
         }
     }
 
-    protected function sendFile($connection, $file)
+    protected function sendFile(TcpConnection $connection, $file)
     {
         $info = stat($file);
         $modifiyTime = $info ? date('D, d M Y H:i:s', $info['mtime']) . ' ' . date_default_timezone_get() : '';
