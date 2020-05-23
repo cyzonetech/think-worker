@@ -28,7 +28,7 @@ class Events
      */
     public static function onWorkerStart(Worker $businessWorker)
     {
-        $app = new Application;
+        $app = new App;
         $app->initialize();
     }
 

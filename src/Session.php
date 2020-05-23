@@ -11,6 +11,7 @@
 namespace think\worker;
 
 use think\Session as BaseSession;
+use Workerman\Worker;
 use Workerman\Protocols\Http as WorkerHttp;
 
 /**
@@ -52,15 +53,14 @@ class Session extends BaseSession
             session_id($_REQUEST[$config['var_session_id']]);
         } elseif (isset($config['id']) && !empty($config['id'])) {
             session_id($config['id']);
-        } else {
-            session_id(WorkerHttp::sessionId());
         }
 
         if (isset($config['name'])) {
+            session_name($config['name']);
             WorkerHttp::sessionName($config['name']);
         }
-
         if (isset($config['path'])) {
+            session_save_path($config['path']);
             WorkerHttp::sessionSavePath($config['path']);
         }
 
@@ -94,22 +94,9 @@ class Session extends BaseSession
         }
 
         if (!empty($config['type'])) {
-            // 读取session驱动
-            $class = false !== strpos($config['type'], '\\') ? $config['type'] : '\\think\\session\\driver\\' . ucwords($config['type']);
-
-            // 检查驱动类
-            if (!class_exists($class) || !session_set_save_handler(new $class($config))) {
-                throw new ClassNotFoundException('error session handler:' . $class, $class);
-            }
+            WorkerHttp::sessionType($config['type']);
+            WorkerHttp::sessionRedis($config);
         }
-
-        if ($isDoStart) {
-            $this->start();
-        } else {
-            $this->init = false;
-        }
-
-        return $this;
     }
 
     /**

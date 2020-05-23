@@ -14,11 +14,11 @@ namespace think\worker\facade;
 use think\Facade;
 
 /**
- * @see \think\worker\Application
- * @mixin \think\worker\Application
+ * @see \think\worker\App
+ * @mixin \think\worker\App
  * @method void initialize() static 初始化应用
- * @method void worker(\Workerman\Connection\TcpConnection $connection) static 处理Worker请求
+ * @method void onMessage(\Workerman\Connection\TcpConnection $connection) static 处理Worker请求
  */
-class Application extends Facade
+class App extends Facade
 {
 }

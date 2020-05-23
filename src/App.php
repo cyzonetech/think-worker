@@ -11,24 +11,53 @@
 
 namespace think\worker;
 
-use think\App;
 use think\Error;
+use think\App as BaseApp;
 use think\exception\HttpException;
+use Workerman\Connection\TcpConnection;
+use Workerman\Worker;
+use Workerman\Lib\Timer;
 use Workerman\Protocols\Http as WorkerHttp;
 
 /**
  * Worker应用对象
  */
-class Application extends App
+class App extends BaseApp
 {
+    /**
+     * @var Worker
+     */
+    protected static $_worker = null;
+    /**
+     * @var int
+     */
+    protected static $_maxRequestCount = 1000000;
+    /**
+     * @var int
+     */
+    protected static $_gracefulStopTimer = null;
+
+    public static function worker(Worker $worker = null)
+    {
+        if ($worker) {
+            static::$_worker = $worker;
+        }
+        return static::$_worker;
+    }
+
     /**
      * 处理Worker请求
      * @access public
      * @param  \Workerman\Connection\TcpConnection   $connection
      * @param  void
      */
-    public function worker($connection)
+    public function onMessage(TcpConnection $connection)
     {
+        static $request_count = 0;
+        if (++$request_count > static::$_maxRequestCount) {
+            static::tryToGracefulExit();
+        }
+
         try {
             ob_start();
             // 重置应用的开始时间和内存占用
@@ -38,14 +67,14 @@ class Application extends App
             // 销毁当前请求对象实例
             $this->delete('think\Request');
 
-            $pathinfo = ltrim(strpos($_SERVER['REQUEST_URI'], '?') ? strstr($_SERVER['REQUEST_URI'], '?', true) : $_SERVER['REQUEST_URI'], '/');
-
-            $this->request
-                ->setPathinfo($pathinfo)
-                ->withInput($GLOBALS['HTTP_RAW_REQUEST_DATA']);
+            $pathinfo = ltrim(strpos($_SERVER['REQUEST_URI'], '?')
+                ? strstr($_SERVER['REQUEST_URI'], '?', true)
+                : $_SERVER['REQUEST_URI'], '/');
+            $this->request->setPathinfo($pathinfo)->withInput($GLOBALS['HTTP_RAW_REQUEST_DATA']);
 
             if ($this->config->get('session.auto_start')) {
-                WorkerHttp::sessionStart();
+                // 启动SESSION
+                $this->session->start();
             }
 
             // 更新请求对象实例
@@ -101,6 +130,17 @@ class Application extends App
         } else {
             $this->httpResponseCode(500);
             $connection->send($e->getMessage());
+        }
+    }
+
+    protected static function tryToGracefulExit()
+    {
+        if (static::$_gracefulStopTimer === null) {
+            static::$_gracefulStopTimer = Timer::add(rand(1, 10), function(){
+                if (\count(static::$_worker->connections) === 0) {
+                    Worker::stopAll();
+                }
+            });
         }
     }
 

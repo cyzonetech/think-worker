@@ -18,7 +18,7 @@ use think\console\input\Option;
 use think\console\Output;
 use think\facade\Config;
 use think\facade\Env;
-use think\worker\Http as HttpServer;
+use think\worker\HttpServer;
 
 /**
  * Worker 命令行类
