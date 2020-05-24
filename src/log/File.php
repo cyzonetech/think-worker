@@ -107,7 +107,13 @@ class File
         $info['timestamp'] = date($this->config['time_format']);
 
         foreach ($message as $type => $msg) {
-            $info[$type] = is_array($msg) ? implode(PHP_EOL, $msg) : $msg;
+            $msg = is_array($msg) ? implode(PHP_EOL, $msg) : $msg;
+            if (PHP_SAPI == 'cli') {
+                $info['msg']  = $msg;
+                $info['type'] = $type;
+            } else {
+                $info[$type] = $msg;
+            }
         }
 
         if (PHP_SAPI == 'cli') {
@@ -210,7 +216,7 @@ class File
             $message = json_encode($info, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) . PHP_EOL;
         } else {
             $now = $info['timestamp'];
-            unset($info['timestamp']);
+            unset($info['timestamp'], $info['type']);
 
             $message = implode(PHP_EOL, $info);
 
