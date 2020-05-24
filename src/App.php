@@ -77,7 +77,7 @@ class App extends BaseApp
             $pathinfo = ltrim(strpos($_SERVER['REQUEST_URI'], '?')
                 ? strstr($_SERVER['REQUEST_URI'], '?', true)
                 : $_SERVER['REQUEST_URI'], '/');
-            Worker::safeEcho("request pathinfo: {$pathinfo}\n");
+
             $this->request->setPathinfo($pathinfo)->withInput($GLOBALS['HTTP_RAW_REQUEST_DATA']);
 
             if ($this->config->get('session.auto_start')) {
@@ -97,13 +97,16 @@ class App extends BaseApp
                 $this->debug->inject($response, $content);
             }
 
+            // 写入日志
+            $this->log->save();
+
             $this->httpResponseCode($response->getCode());
 
             foreach ($response->getHeader() as $name => $val) {
                 // 发送头部信息
                 WorkerHttp::header($name . (!is_null($val) ? ':' . $val : ''));
             }
-            Worker::safeEcho("request end\n\n");
+
             if (strtolower($_SERVER['HTTP_CONNECTION']) === "keep-alive") {
                 $connection->send($content);
             } else {
@@ -127,7 +130,6 @@ class App extends BaseApp
     {
         // 写入日志
         $this->log->save();
-        Worker::safeEcho("request exception end\n\n");
 
         if ($e instanceof \Exception) {
             $handler = Error::getExceptionHandler();
