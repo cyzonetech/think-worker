@@ -19,7 +19,7 @@ use think\App;
 class File
 {
     protected $config = [
-        'time_format' => ' c ',
+        'time_format' => 'c',
         'single'      => false,
         'file_size'   => 2097152,
         'path'        => '',
@@ -107,7 +107,7 @@ class File
         $info['timestamp'] = date($this->config['time_format']);
 
         foreach ($message as $type => $msg) {
-            $info[$type] = is_array($msg) ? implode("\r\n", $msg) : $msg;
+            $info[$type] = is_array($msg) ? implode(PHP_EOL, $msg) : $msg;
         }
 
         if (PHP_SAPI == 'cli') {
@@ -129,23 +129,28 @@ class File
      */
     protected function getMasterLogFile()
     {
-        if ($this->config['single']) {
-            $name = is_string($this->config['single']) ? $this->config['single'] : 'worker';
+        if ($this->config['max_files']) {
+            $files = glob($this->config['path'] . '*.log');
 
-            $destination = $this->config['path'] . $name . '.log';
+            try {
+                if (count($files) > $this->config['max_files']) {
+                    unlink($files[0]);
+                }
+            } catch (\Exception $e) {
+            }
+        }
+
+        $cli = PHP_SAPI == 'cli' ? '_worker' : '';
+
+        if ($this->config['single']) {
+            $name = is_string($this->config['single']) ? $this->config['single'] : 'single';
+
+            $destination = $this->config['path'] . $name . $cli . '.log';
         } else {
             if ($this->config['max_files']) {
-                $filename = date('Ymd') . '_worker.log';
-                $files    = glob($this->config['path'] . '*.log');
-
-                try {
-                    if (count($files) > $this->config['max_files']) {
-                        unlink($files[0]);
-                    }
-                } catch (\Exception $e) {
-                }
+                $filename = date('Ymd') . $cli . '.log';
             } else {
-                $filename = date('Ym') . DIRECTORY_SEPARATOR . date('d') . '_worker.log';
+                $filename = date('Ym') . DIRECTORY_SEPARATOR . date('d') . $cli . '.log';
             }
 
             $destination = $this->config['path'] . $filename;
@@ -163,9 +168,10 @@ class File
      */
     protected function getApartLevelFile($path, $type)
     {
-        if ($this->config['single']) {
-            $name = is_string($this->config['single']) ? $this->config['single'] : 'worker';
+        $cli = PHP_SAPI == 'cli' ? '_worker' : '';
 
+        if ($this->config['single']) {
+            $name = is_string($this->config['single']) ? $this->config['single'] : 'single';
             $name .= '_' . $type;
         } elseif ($this->config['max_files']) {
             $name = date('Ymd') . '_' . $type . '_worker';
@@ -173,7 +179,7 @@ class File
             $name = date('d') . '_' . $type . '_worker';
         }
 
-        return $path . DIRECTORY_SEPARATOR . $name . '.log';
+        return $path . DIRECTORY_SEPARATOR . $name . '_' . $type . $cli . '.log';
     }
 
     /**
@@ -201,14 +207,14 @@ class File
     protected function parseCliLog($info)
     {
         if ($this->config['json']) {
-            $message = json_encode($info, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) . "\r\n";
+            $message = json_encode($info, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) . PHP_EOL;
         } else {
             $now = $info['timestamp'];
             unset($info['timestamp']);
 
-            $message = implode("\r\n", $info);
+            $message = implode(PHP_EOL, $info);
 
-            $message = "[{$now}]" . $message . "\r\n";
+            $message = "[{$now}]" . $message . PHP_EOL;
         }
 
         return $message;
@@ -231,13 +237,13 @@ class File
 
         if ($this->config['json']) {
             $info = $requestInfo + $info;
-            return json_encode($info, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) . "\r\n";
+            return json_encode($info, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) . PHP_EOL;
         }
 
-        array_unshift($info, "---------------------------------------------------------------\r\n[{$info['timestamp']}] {$requestInfo['ip']} {$requestInfo['method']} {$requestInfo['host']}{$requestInfo['uri']}");
+        array_unshift($info, "---------------------------------------------------------------" . PHP_EOL . "[{$info['timestamp']}] {$requestInfo['ip']} {$requestInfo['method']} {$requestInfo['host']}{$requestInfo['uri']}");
         unset($info['timestamp']);
 
-        return implode("\r\n", $info) . "\r\n";
+        return implode(PHP_EOL, $info) . PHP_EOL;
     }
 
     protected function getDebugLog(&$info, $append, $apart)
@@ -252,11 +258,11 @@ class File
                 $memory_use = number_format((memory_get_usage() - $this->app->getBeginMem()) / 1024, 2);
 
                 $info = [
-                    'runtime' => number_format($runtime, 6) . 's',
-                    'reqs'    => $reqs . 'req/s',
-                    'memory'  => $memory_use . 'kb',
-                    'file'    => count(get_included_files()),
-                ] + $info;
+                        'runtime' => number_format($runtime, 6) . 's',
+                        'reqs'    => $reqs . 'req/s',
+                        'memory'  => $memory_use . 'kb',
+                        'file'    => count(get_included_files()),
+                    ] + $info;
 
             } elseif (!$apart) {
                 // 增加额外的调试信息

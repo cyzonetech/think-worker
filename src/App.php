@@ -67,9 +67,17 @@ class App extends BaseApp
             // 销毁当前请求对象实例
             $this->delete('think\Request');
 
+            // 重置异常类
+            if ($this->config->get('app.exception_handle.common')) {
+                Error::setExceptionHandler($this->config->get('app.exception_handle.common'));
+            } else {
+                Error::setExceptionHandler(\think\exception\Handle::class);
+            }
+
             $pathinfo = ltrim(strpos($_SERVER['REQUEST_URI'], '?')
                 ? strstr($_SERVER['REQUEST_URI'], '?', true)
                 : $_SERVER['REQUEST_URI'], '/');
+            Worker::safeEcho("request pathinfo: {$pathinfo}\n");
             $this->request->setPathinfo($pathinfo)->withInput($GLOBALS['HTTP_RAW_REQUEST_DATA']);
 
             if ($this->config->get('session.auto_start')) {
@@ -95,7 +103,7 @@ class App extends BaseApp
                 // 发送头部信息
                 WorkerHttp::header($name . (!is_null($val) ? ':' . $val : ''));
             }
-
+            Worker::safeEcho("request end\n\n");
             if (strtolower($_SERVER['HTTP_CONNECTION']) === "keep-alive") {
                 $connection->send($content);
             } else {
@@ -117,6 +125,10 @@ class App extends BaseApp
 
     protected function exception($connection, $e)
     {
+        // 写入日志
+        $this->log->save();
+        Worker::safeEcho("request exception end\n\n");
+
         if ($e instanceof \Exception) {
             $handler = Error::getExceptionHandler();
             $handler->report($e);
