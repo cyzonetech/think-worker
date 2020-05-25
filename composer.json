@@ -10,7 +10,7 @@
         }
     ],
     "require": {
-        "workerman/workerman": "^3.5.0",
+        "cyzonetech/workerman": "^3.5.0",
         "workerman/gateway-worker": "^3.0.0",
         "ext-fileinfo": "*"
     },
