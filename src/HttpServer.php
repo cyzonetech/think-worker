@@ -10,13 +10,11 @@
 // +----------------------------------------------------------------------
 namespace think\worker;
 
-use RecursiveDirectoryIterator;
-use RecursiveIteratorIterator;
 use think\Facade;
 use think\Loader;
-use Workerman\Connection\TcpConnection;
 use Workerman\Worker;
 use Workerman\Lib\Timer;
+use Workerman\Connection\TcpConnection;
 use Workerman\Protocols\Http as WorkerHttp;
 
 /**
@@ -28,7 +26,6 @@ class HttpServer extends Server
     protected $appPath;
     protected $root;
     protected $monitor;
-    protected $lastMtime;
     /** @var array Mime mapping. */
     protected static $mimeTypeMap = [];
 
@@ -128,26 +125,27 @@ class HttpServer extends Server
         $this->app->session->init();
 
         if (0 == $worker->id && $this->monitor) {
-            $paths = $this->monitor['path'] ?: [$this->app->getAppPath(), $this->app->getConfigPath()];
+            $paths = [
+                $this->app->getAppPath(),
+                $this->app->getConfigPath()
+            ];
+            $paths = $this->monitor['path'] ? array_merge($paths, $this->monitor['path']) : $paths;
             $timer = $this->monitor['interval'] ?: 2;
+            // 扫描目录
+            $dest = implode(' ', $paths);
+            // 定时扫描
+            Timer::add($timer, function () use ($dest, $timer) {
+                $seconds = ceil(($timer * 1000) / 1000);
+                $minutes = sprintf('-%.2f', $seconds / 60);
 
-            Timer::add($timer, function () use ($paths) {
-                foreach ($paths as $path) {
-                    $dir = new RecursiveDirectoryIterator($path);
-                    $iterator = new RecursiveIteratorIterator($dir);
+                $bin = PHP_OS === 'Darwin' ? 'gfind' : 'find';
+                $cmd = "{$bin} {$dest} -mmin {$minutes} -type f -regex \".*\.php\|.*\.html\"";
 
-                    foreach ($iterator as $file) {
-                        if (pathinfo($file, PATHINFO_EXTENSION) != 'php') {
-                            continue;
-                        }
-
-                        if ($this->lastMtime < $file->getMTime()) {
-                            echo '[update]' . $file . "\n";
-                            posix_kill(posix_getppid(), SIGUSR1);
-                            $this->lastMtime = $file->getMTime();
-                            return;
-                        }
-                    }
+                exec($cmd, $output);
+                if ($output) {
+                    echo '[update: ' . date('H:i:s') . ']' . implode(PHP_EOL, $output) . PHP_EOL;
+                    posix_kill(posix_getppid(), SIGUSR1);
+                    return;
                 }
             });
         }
