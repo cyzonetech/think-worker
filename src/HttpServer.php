@@ -127,7 +127,11 @@ class HttpServer extends Server
         if (0 == $worker->id && $this->monitor) {
             $paths = [
                 $this->app->getAppPath(),
-                $this->app->getConfigPath()
+                $this->app->getConfigPath(),
+                $this->app->getRootPath() . '.env',
+                $this->app->getRootPath() . 'route' . DIRECTORY_SEPARATOR,
+                $this->app->getRootPath() . 'extend' . DIRECTORY_SEPARATOR,
+                $this->app->getRootPath() . 'vendor' . DIRECTORY_SEPARATOR,
             ];
             $paths = $this->monitor['path'] ? array_merge($paths, $this->monitor['path']) : $paths;
             $timer = $this->monitor['interval'] ?: 2;
@@ -139,7 +143,7 @@ class HttpServer extends Server
                 $minutes = sprintf('-%.2f', $seconds / 60);
 
                 $bin = PHP_OS === 'Darwin' ? 'gfind' : 'find';
-                $cmd = "{$bin} {$dest} -mmin {$minutes} -type f -regex \".*\.php\|.*\.html\"";
+                $cmd = "{$bin} {$dest} -mmin {$minutes} -type f -regex \".*\.php\|.*\.html\|.*\.env\"";
 
                 exec($cmd, $output);
                 if ($output) {
